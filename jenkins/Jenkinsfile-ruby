@@ -12,8 +12,8 @@ pipeline {
     parameters {
         choice(
             name: 'SERVICE',
-            choices: ['all', 'currency', 'email', 'flagd-ui', 'quote', 'shipping'],
-            description: 'C++ / Ruby / Elixir / PHP / Rust service to build, scan and push to Artifact Registry'
+            choices: ['email'],
+            description: 'Ruby service to build, scan and push to Artifact Registry'
         )
         string(
             name: 'CUSTOM_TAG',
@@ -57,47 +57,11 @@ pipeline {
             }
         }
 
-        stage('currency') {
-            when { expression { params.SERVICE == 'all' || params.SERVICE == 'currency' } }
-            steps {
-                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    script { buildAndPush('currency', 'src/currency/Dockerfile', ['OPENTELEMETRY_CPP_VERSION']) }
-                }
-            }
-        }
-
         stage('email') {
             when { expression { params.SERVICE == 'all' || params.SERVICE == 'email' } }
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                     script { buildAndPush('email', 'src/email/Dockerfile', []) }
-                }
-            }
-        }
-
-        stage('flagd-ui') {
-            when { expression { params.SERVICE == 'all' || params.SERVICE == 'flagd-ui' } }
-            steps {
-                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    script { buildAndPush('flagd-ui', 'src/flagd-ui/Dockerfile', []) }
-                }
-            }
-        }
-
-        stage('quote') {
-            when { expression { params.SERVICE == 'all' || params.SERVICE == 'quote' } }
-            steps {
-                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    script { buildAndPush('quote', 'src/quote/Dockerfile', []) }
-                }
-            }
-        }
-
-        stage('shipping') {
-            when { expression { params.SERVICE == 'all' || params.SERVICE == 'shipping' } }
-            steps {
-                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    script { buildAndPush('shipping', 'src/shipping/Dockerfile', []) }
                 }
             }
         }

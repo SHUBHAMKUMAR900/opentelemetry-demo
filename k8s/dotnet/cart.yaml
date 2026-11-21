@@ -1,0 +1,92 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart
+  namespace: otel-demo
+  labels:
+    app: cart
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cart
+  template:
+    metadata:
+      labels:
+        app: cart
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: cart
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/cart:v1.1.4
+        ports:
+        - name: port-7070
+          containerPort: 7070
+        env:
+        - name: CART_PORT
+          value: '7070'
+        - name: FLAGD_HOST
+          value: flagd
+        - name: FLAGD_PORT
+          value: '8013'
+        - name: VALKEY_ADDR
+          value: valkey-cart:6379
+        - name: VALKEY_PASSWORD
+          value: ''
+        - name: VALKEY_TLS
+          value: ''
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4317
+        - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          value: cumulative
+        - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+          value: explicit_bucket_histogram
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=high
+        - name: OTEL_SERVICE_NAME
+          value: cart
+        - name: ASPNETCORE_HTTP_PORTS
+          value: '7070'
+        - name: OPAMP_SERVER_ENDPOINT
+          value: wss://opamp-server:4320/v1/opamp
+        - name: OPAMP_SERVER_TLS_INSECURE_SKIP_VERIFY
+          value: 'true'
+        resources:
+          requests:
+            cpu: 50m
+            memory: 80Mi
+          limits:
+            memory: 160Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          tcpSocket:
+            port: 7070
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 7070
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart
+  namespace: otel-demo
+  labels:
+    app: cart
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  selector:
+    app: cart
+  ports:
+  - name: port-7070
+    port: 7070
+    targetPort: 7070

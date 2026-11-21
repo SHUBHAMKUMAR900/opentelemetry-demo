@@ -1,0 +1,159 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: product-catalog-otel-config
+  namespace: otel-demo
+data:
+  otel-config.yml: |
+    # Copyright The OpenTelemetry Authors
+    # SPDX-License-Identifier: Apache-2.0
+
+    file_format: "1.0"
+    disabled: false
+    log_level: info
+    logger_provider:
+      processors:
+        - batch:
+            exporter:
+              otlp_grpc:
+                endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+    meter_provider:
+      readers:
+        - periodic:
+            exporter:
+              otlp_grpc:
+                endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+                temporality_preference: ${OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE:-cumulative}
+    tracer_provider:
+      processors:
+        - batch:
+            exporter:
+              otlp_grpc:
+                endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+    propagator:
+      composite:
+        - tracecontext:
+        - baggage:
+    resource:
+      attributes_list: ${OTEL_RESOURCE_ATTRIBUTES}
+      detection/development:
+        detectors:
+          - container:
+          - host:
+          - process:
+          - service:
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: product-catalog-secrets
+  namespace: otel-demo
+type: Opaque
+stringData:
+  DB_CONNECTION_STRING: postgres://astronomy_user:astronomy_password@astronomy-db/astronomy_db?sslmode=disable
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-catalog
+  namespace: otel-demo
+  labels:
+    app: product-catalog
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-catalog
+  template:
+    metadata:
+      labels:
+        app: product-catalog
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: product-catalog
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/product-catalog:v1.1.10
+        ports:
+        - name: port-3550
+          containerPort: 3550
+        env:
+        - name: PRODUCT_CATALOG_PORT
+          value: '3550'
+        - name: FLAGD_HOST
+          value: flagd
+        - name: FLAGD_PORT
+          value: '8013'
+        - name: GOMEMLIMIT
+          value: 16MiB
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4317
+        - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          value: cumulative
+        - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+          value: explicit_bucket_histogram
+        - name: OTEL_GO_X_OBSERVABILITY
+          value: 'true'
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=high
+        - name: OTEL_SERVICE_NAME
+          value: product-catalog
+        - name: OTEL_CONFIG_FILE
+          value: /otel-config.yml
+        - name: OTEL_SEMCONV_STABILITY_OPT_IN
+          value: database
+        - name: DB_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: product-catalog-secrets
+              key: DB_CONNECTION_STRING
+        - name: OPAMP_SERVER_ENDPOINT
+          value: wss://opamp-server:4320/v1/opamp
+        - name: OPAMP_SERVER_TLS_INSECURE_SKIP_VERIFY
+          value: 'true'
+        resources:
+          requests:
+            cpu: 50m
+            memory: 16Mi
+          limits:
+            memory: 20Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          tcpSocket:
+            port: 3550
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 3550
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+        volumeMounts:
+        - name: otel-config
+          mountPath: /otel-config.yml
+          subPath: otel-config.yml
+      volumes:
+      - name: otel-config
+        configMap:
+          name: product-catalog-otel-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-catalog
+  namespace: otel-demo
+  labels:
+    app: product-catalog
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  selector:
+    app: product-catalog
+  ports:
+  - name: port-3550
+    port: 3550
+    targetPort: 3550

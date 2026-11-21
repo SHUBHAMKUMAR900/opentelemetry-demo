@@ -1,0 +1,64 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: Secret
+metadata:
+  name: accounting-secrets
+  namespace: otel-demo
+type: Opaque
+stringData:
+  DB_CONNECTION_STRING: Host=astronomy-db;Username=astronomy_user;Password=astronomy_password;Database=astronomy_db
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accounting
+  namespace: otel-demo
+  labels:
+    app: accounting
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: accounting
+  template:
+    metadata:
+      labels:
+        app: accounting
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: accounting
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/accounting:v1.1.5
+        env:
+        - name: KAFKA_ADDR
+          value: kafka:9092
+        - name: KAFKA_TOPIC
+          value: orders
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4318
+        - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          value: cumulative
+        - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+          value: explicit_bucket_histogram
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=low
+        - name: OTEL_SERVICE_NAME
+          value: accounting
+        - name: DB_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: accounting-secrets
+              key: DB_CONNECTION_STRING
+        - name: OTEL_DOTNET_AUTO_TRACES_ENTITYFRAMEWORKCORE_INSTRUMENTATION_ENABLED
+          value: 'false'
+        resources:
+          requests:
+            cpu: 50m
+            memory: 80Mi
+          limits:
+            memory: 160Mi
+        securityContext:
+          allowPrivilegeEscalation: false

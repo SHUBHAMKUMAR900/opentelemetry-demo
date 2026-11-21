@@ -1,0 +1,60 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraud-detection
+  namespace: otel-demo
+  labels:
+    app: fraud-detection
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fraud-detection
+  template:
+    metadata:
+      labels:
+        app: fraud-detection
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: fraud-detection
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/fraud-detection:v1.1.13
+        env:
+        - name: FLAGD_HOST
+          value: flagd
+        - name: FLAGD_PORT
+          value: '8013'
+        - name: KAFKA_ADDR
+          value: kafka:9092
+        - name: KAFKA_TOPIC
+          value: orders
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4318
+        - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          value: cumulative
+        - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+          value: explicit_bucket_histogram
+        - name: OTEL_INSTRUMENTATION_KAFKA_EXPERIMENTAL_SPAN_ATTRIBUTES
+          value: 'true'
+        - name: OTEL_INSTRUMENTATION_MESSAGING_EXPERIMENTAL_RECEIVE_TELEMETRY_ENABLED
+          value: 'true'
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=low
+        - name: OTEL_SERVICE_NAME
+          value: fraud-detection
+        - name: OTEL_EXPERIMENTAL_SDK_TELEMETRY_VERSION
+          value: latest
+        - name: _JAVA_OPTIONS
+          value: ''
+        resources:
+          requests:
+            cpu: 50m
+            memory: 150Mi
+          limits:
+            memory: 300Mi
+        securityContext:
+          allowPrivilegeEscalation: false

@@ -1,0 +1,86 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatbot
+  namespace: otel-demo
+  labels:
+    app: chatbot
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chatbot
+  template:
+    metadata:
+      labels:
+        app: chatbot
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: chatbot
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/chatbot:v1.1.12
+        ports:
+        - name: port-7860
+          containerPort: 7860
+        env:
+        - name: AGENT_PORT
+          value: '8010'
+        - name: AGENT_ENDPOINT
+          value: agent
+        - name: CHATBOT_PORT
+          value: '7860'
+        - name: CHATBOT_ROOT_PATH
+          value: /chatbot
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=low
+        - name: OTEL_SERVICE_NAME
+          value: chatbot
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4318
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: 'true'
+        - name: OTEL_PYTHON_SDK_INTERNAL_METRICS_ENABLED
+          value: 'true'
+        - name: OPAMP_SERVER_ENDPOINT
+          value: https://opamp-server:4320/v1/opamp
+        - name: OPAMP_SERVER_TLS_INSECURE_SKIP_VERIFY
+          value: 'true'
+        resources:
+          requests:
+            cpu: 50m
+            memory: 250Mi
+          limits:
+            memory: 500Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          tcpSocket:
+            port: 7860
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 7860
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatbot
+  namespace: otel-demo
+  labels:
+    app: chatbot
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  selector:
+    app: chatbot
+  ports:
+  - name: port-7860
+    port: 7860
+    targetPort: 7860

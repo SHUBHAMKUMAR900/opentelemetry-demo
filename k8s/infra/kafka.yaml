@@ -1,0 +1,88 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: otel-demo
+  labels:
+    app: kafka
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: kafka
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/kafka:v1.1.11
+        ports:
+        - name: port-9092
+          containerPort: 9092
+        env:
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: PLAINTEXT://kafka:9092
+        - name: KAFKA_LISTENERS
+          value: PLAINTEXT://:9092,CONTROLLER://:9093
+        - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+          value: 1@localhost:9093
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4318
+        - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          value: cumulative
+        - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+          value: explicit_bucket_histogram
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=low
+        - name: OTEL_SERVICE_NAME
+          value: kafka
+        - name: OTEL_EXPERIMENTAL_SDK_TELEMETRY_VERSION
+          value: latest
+        - name: KAFKA_HEAP_OPTS
+          value: -Xmx400m -Xms400m
+        - name: _JAVA_OPTIONS
+          value: ''
+        resources:
+          requests:
+            cpu: 200m
+            memory: 310Mi
+          limits:
+            memory: 620Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          failureThreshold: 5
+  strategy:
+    type: Recreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: otel-demo
+  labels:
+    app: kafka
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  selector:
+    app: kafka
+  ports:
+  - name: port-9092
+    port: 9092
+    targetPort: 9092

@@ -1,0 +1,93 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ad
+  namespace: otel-demo
+  labels:
+    app: ad
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ad
+  template:
+    metadata:
+      labels:
+        app: ad
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: ad
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/ad:v1.1.13
+        ports:
+        - name: port-9555
+          containerPort: 9555
+        - name: port-9465
+          containerPort: 9465
+        env:
+        - name: AD_PORT
+          value: '9555'
+        - name: AD_PROMETHEUS_PORT
+          value: '9465'
+        - name: FLAGD_HOST
+          value: flagd
+        - name: FLAGD_PORT
+          value: '8013'
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4318
+        - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          value: cumulative
+        - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+          value: explicit_bucket_histogram
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=medium
+        - name: OTEL_LOGS_EXPORTER
+          value: otlp
+        - name: OTEL_SERVICE_NAME
+          value: ad
+        - name: OTEL_EXPERIMENTAL_SDK_TELEMETRY_VERSION
+          value: latest
+        - name: _JAVA_OPTIONS
+          value: ''
+        resources:
+          requests:
+            cpu: 50m
+            memory: 150Mi
+          limits:
+            memory: 300Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          tcpSocket:
+            port: 9555
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 9555
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ad
+  namespace: otel-demo
+  labels:
+    app: ad
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  selector:
+    app: ad
+  ports:
+  - name: port-9555
+    port: 9555
+    targetPort: 9555
+  - name: port-9465
+    port: 9465
+    targetPort: 9465

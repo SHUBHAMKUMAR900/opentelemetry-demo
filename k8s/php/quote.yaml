@@ -1,0 +1,82 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quote
+  namespace: otel-demo
+  labels:
+    app: quote
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quote
+  template:
+    metadata:
+      labels:
+        app: quote
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: quote
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/quote:NOT-BUILT-YET
+        ports:
+        - name: port-8090
+          containerPort: 8090
+        env:
+        - name: IPV6_ENABLED
+          value: 'false'
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4318
+        - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          value: cumulative
+        - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+          value: explicit_bucket_histogram
+        - name: OTEL_PHP_AUTOLOAD_ENABLED
+          value: 'true'
+        - name: QUOTE_PORT
+          value: '8090'
+        - name: OTEL_PHP_INTERNAL_METRICS_ENABLED
+          value: 'true'
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=low
+        - name: OTEL_SERVICE_NAME
+          value: quote
+        resources:
+          requests:
+            cpu: 50m
+            memory: 20Mi
+          limits:
+            memory: 40Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          tcpSocket:
+            port: 8090
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8090
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quote
+  namespace: otel-demo
+  labels:
+    app: quote
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  selector:
+    app: quote
+  ports:
+  - name: port-8090
+    port: 8090
+    targetPort: 8090

@@ -1,0 +1,416 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flagd-config
+  namespace: otel-demo
+data:
+  demo.flagd.json: |
+    {
+      "$schema": "https://flagd.dev/schema/v0/flags.json",
+      "flags": {
+        "adFailure": {
+          "defaultVariant": "off",
+          "description": "Fail ad service",
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "adHighCpu": {
+          "defaultVariant": "off",
+          "description": "Triggers high cpu load in the ad service",
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "adManualGc": {
+          "defaultVariant": "off",
+          "description": "Triggers full manual garbage collections in the ad service",
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "aiRunawayAgent": {
+          "defaultVariant": "off",
+          "description": "forces the agent to keep looping tool calls until it hits its recursion limit",
+          "state": "ENABLED",
+          "variants": {
+            "off": 0,
+            "on": 20
+          }
+        },
+        "aiSlowResponse": {
+          "defaultVariant": "off",
+          "description": "slow LLM responses in the agent service",
+          "state": "ENABLED",
+          "variants": {
+            "10sec": 10000,
+            "5sec": 5000,
+            "off": 0
+          }
+        },
+        "cartFailure": {
+          "defaultVariant": "off",
+          "description": "Fail cart service n% of the time",
+          "state": "ENABLED",
+          "variants": {
+            "10%": 0.1,
+            "100%": 1,
+            "25%": 0.25,
+            "50%": 0.5,
+            "75%": 0.75,
+            "90%": 0.9,
+            "off": 0
+          }
+        },
+        "cartMetricCardinalityOverflow": {
+          "defaultVariant": "off",
+          "description": "Adds the current trace ID to demo.cart.get_cart.latency to trigger SDK metric cardinality overflow. View it in the Self-Observability dashboard.",
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "emailMemoryLeak": {
+          "defaultVariant": "off",
+          "description": "Memory leak in the email service.",
+          "state": "ENABLED",
+          "variants": {
+            "10000x": 10000,
+            "1000x": 1000,
+            "100x": 100,
+            "10x": 10,
+            "1x": 1,
+            "off": 0
+          }
+        },
+        "emitRawPii": {
+          "defaultVariant": "off",
+          "description": "Emit raw PII attributes (user.email, demo.payment.card_number, demo.payment.card_cvv) from checkout and payment for the collector redaction example. Not a failure scenario -- controls PII emission, independent of collector-side redaction which always runs.",
+          "metadata": {
+            "schedulable": false
+          },
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "failedReadinessProbe": {
+          "defaultVariant": "off",
+          "description": "readiness probe failure for cart service",
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "imageSlowLoad": {
+          "defaultVariant": "off",
+          "description": "slow loading images in the frontend",
+          "state": "ENABLED",
+          "variants": {
+            "10sec": 10000,
+            "5sec": 5000,
+            "off": 0
+          }
+        },
+        "intlShippingSlowdown": {
+          "defaultVariant": "off",
+          "description": "Delays international shipping responses to simulate overseas shipping delay",
+          "state": "ENABLED",
+          "variants": {
+            "10sec": 10,
+            "5sec": 5,
+            "off": 0
+          }
+        },
+        "kafkaConsumerDead": {
+          "defaultVariant": "off",
+          "description": "fraud-detection leaves the orders consumer group (unsubscribes and stops polling) while checkout keeps producing, so the group empties (members -> 0) and lag climbs against a zero-member group",
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "kafkaQueueProblems": {
+          "defaultVariant": "off",
+          "description": "Throttles the fraud-detection consumer by sleeping N ms per consumed record (value = per-record delay in ms). Drains slower than checkout produces, so consumer lag climbs. Tune the delay live from this flag.",
+          "state": "ENABLED",
+          "variants": {
+            "1sec": 1000,
+            "3sec": 3000,
+            "5sec": 5000,
+            "off": 0
+          }
+        },
+        "loadGeneratorFloodHomepage": {
+          "defaultVariant": "off",
+          "description": "Flood the frontend with a large amount of requests.",
+          "state": "ENABLED",
+          "variants": {
+            "off": 0,
+            "on": 100
+          }
+        },
+        "paymentFailure": {
+          "defaultVariant": "off",
+          "description": "Fail payment service charge requests n%",
+          "state": "ENABLED",
+          "variants": {
+            "10%": 0.1,
+            "100%": 1,
+            "25%": 0.25,
+            "50%": 0.5,
+            "75%": 0.75,
+            "90%": 0.95,
+            "off": 0
+          }
+        },
+        "paymentUnreachable": {
+          "defaultVariant": "off",
+          "description": "Payment service is unavailable",
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "productCatalogFailure": {
+          "defaultVariant": "off",
+          "description": "Fail product catalog service on a specific product",
+          "state": "ENABLED",
+          "targeting": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "product_id"
+                  },
+                  "OLJCESPC7Z"
+                ]
+              },
+              "off",
+              "off"
+            ]
+          },
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "productCatalogLockContention": {
+          "defaultVariant": "off",
+          "description": "Trigger lock contention on the product catalog database",
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "recommendationCacheFailure": {
+          "defaultVariant": "off",
+          "description": "Fail recommendation service cache",
+          "state": "ENABLED",
+          "variants": {
+            "off": false,
+            "on": true
+          }
+        },
+        "webInteractionSlowdown": {
+          "defaultVariant": "off",
+          "description": "make a third-party analytics tag serialize, sort and fingerprint a large event queue on every click, blocking the main thread and degrading Interaction to Next Paint",
+          "state": "ENABLED",
+          "variants": {
+            "1200k": 1200000,
+            "300k": 300000,
+            "600k": 600000,
+            "off": 0
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flagd-ui-secrets
+  namespace: otel-demo
+type: Opaque
+stringData:
+  SECRET_KEY_BASE: yYrECL4qbNwleYInGJYvVnSkwJuSQJ4ijPTx5tirGUXrbznFIBFVJdPl5t6O9ASw
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flagd
+  namespace: otel-demo
+  labels:
+    app: flagd
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flagd
+  template:
+    metadata:
+      labels:
+        app: flagd
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: flagd
+        image: ghcr.io/open-feature/flagd:v0.16.0
+        args:
+        - start
+        - --uri
+        - file:./etc/flagd/demo.flagd.json
+        ports:
+        - name: port-8013
+          containerPort: 8013
+        - name: port-8016
+          containerPort: 8016
+        env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4318
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: http/protobuf
+        - name: GOMEMLIMIT
+          value: 60MiB
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=low
+        - name: OTEL_SERVICE_NAME
+          value: flagd
+        resources:
+          requests:
+            cpu: 50m
+            memory: 37Mi
+          limits:
+            memory: 75Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          tcpSocket:
+            port: 8013
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8013
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+        volumeMounts:
+        - name: flags
+          mountPath: /etc/flagd
+      - name: flagd-ui
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/flagd-ui:3-2ff7b83
+        ports:
+        - name: port-4000
+          containerPort: 4000
+        env:
+        - name: FLAGD_UI_PORT
+          value: '4000'
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4318
+        - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          value: cumulative
+        - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+          value: explicit_bucket_histogram
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=low
+        - name: OTEL_SERVICE_NAME
+          value: flagd-ui
+        - name: SECRET_KEY_BASE
+          valueFrom:
+            secretKeyRef:
+              name: flagd-ui-secrets
+              key: SECRET_KEY_BASE
+        - name: PHX_HOST
+          value: localhost
+        resources:
+          requests:
+            cpu: 50m
+            memory: 100Mi
+          limits:
+            memory: 200Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          tcpSocket:
+            port: 4000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 4000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+        volumeMounts:
+        - name: flags
+          mountPath: /app/data
+      initContainers:
+      - name: copy-flags
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/flagd-ui:3-2ff7b83
+        command:
+        - sh
+        - -c
+        - cp /config/demo.flagd.json /data/demo.flagd.json
+        volumeMounts:
+        - name: flag-config
+          mountPath: /config
+        - name: flags
+          mountPath: /data
+      volumes:
+      - name: flags
+        emptyDir: {}
+      - name: flag-config
+        configMap:
+          name: flagd-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flagd
+  namespace: otel-demo
+  labels:
+    app: flagd
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  selector:
+    app: flagd
+  ports:
+  - name: port-8013
+    port: 8013
+    targetPort: 8013
+  - name: port-8016
+    port: 8016
+    targetPort: 8016
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flagd-ui
+  namespace: otel-demo
+  labels:
+    app: flagd-ui
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  selector:
+    app: flagd
+  ports:
+  - name: port-4000
+    port: 4000
+    targetPort: 4000

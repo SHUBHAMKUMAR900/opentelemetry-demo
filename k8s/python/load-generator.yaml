@@ -1,0 +1,106 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-generator
+  namespace: otel-demo
+  labels:
+    app: load-generator
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: load-generator
+  template:
+    metadata:
+      labels:
+        app: load-generator
+        app.kubernetes.io/part-of: opentelemetry-demo
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: load-generator
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/load-generator:v1.1.12
+        ports:
+        - name: port-8089
+          containerPort: 8089
+        env:
+        - name: LOCUST_WEB_PORT
+          value: '8089'
+        - name: LOCUST_USERS
+          value: '5'
+        - name: LOCUST_HOST
+          value: http://frontend-proxy:8080
+        - name: LOCUST_HEADLESS
+          value: 'false'
+        - name: LOCUST_AUTOSTART
+          value: 'true'
+        - name: LOCUST_BROWSER_TRAFFIC_ENABLED
+          value: 'true'
+        - name: LOCUST_HTTP_USER_WEIGHT
+          value: '9'
+        - name: LOCUST_BROWSER_USER_WEIGHT
+          value: '1'
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector:4317
+        - name: OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+          value: cumulative
+        - name: OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION
+          value: explicit_bucket_histogram
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=opentelemetry-demo,service.version=3.1.0,service.criticality=low
+        - name: OTEL_SERVICE_NAME
+          value: load-generator
+        - name: OTEL_PYTHON_SDK_INTERNAL_METRICS_ENABLED
+          value: 'true'
+        - name: PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION
+          value: python
+        - name: LOCUST_WEB_HOST
+          value: 0.0.0.0
+        - name: FLAGD_HOST
+          value: flagd
+        - name: FLAGD_PORT
+          value: '8013'
+        - name: FLAGD_OFREP_PORT
+          value: '8016'
+        - name: AGENT_ENDPOINT
+          value: agent
+        - name: AGENT_PORT
+          value: '8010'
+        resources:
+          requests:
+            cpu: 100m
+            memory: 750Mi
+          limits:
+            memory: 1500Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+        readinessProbe:
+          tcpSocket:
+            port: 8089
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8089
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: load-generator
+  namespace: otel-demo
+  labels:
+    app: load-generator
+    app.kubernetes.io/part-of: opentelemetry-demo
+spec:
+  selector:
+    app: load-generator
+  ports:
+  - name: port-8089
+    port: 8089
+    targetPort: 8089

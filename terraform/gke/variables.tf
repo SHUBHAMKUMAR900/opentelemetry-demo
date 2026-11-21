@@ -28,7 +28,7 @@ variable "cluster_name" {
 variable "node_service_account" {
   description = "Service account the nodes run as. Needs roles/container.defaultNodeServiceAccount and Artifact Registry reader on the otel repository"
   type        = string
-  default     = "gke-otel-nodes@ct-lens.iam.gserviceaccount.com"
+  default     = "astronomy-gke-nodes@ct-lens.iam.gserviceaccount.com"
 }
 
 variable "machine_type" {

@@ -1,0 +1,142 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+        timeout(time: 60, unit: 'MINUTES')
+    }
+
+    parameters {
+        choice(name: 'ACTION', choices: ['plan', 'up', 'down'], description: 'plan: only show what Terraform would change. up: create the GKE cluster and deploy the demo. down: delete the cluster')
+        choice(name: 'MACHINE_TYPE', choices: ['e2-standard-4', 'e2-standard-2', 'e2-standard-8'], description: 'Machine type of the GKE nodes')
+        choice(name: 'NODE_COUNT', choices: ['1', '2', '3'], description: 'Number of GKE nodes')
+        booleanParam(name: 'SPOT', defaultValue: false, description: 'Use Spot VMs for the nodes. Much cheaper, but Google can reclaim a node at any time. Keep it off for client demos')
+        booleanParam(name: 'DEPLOY_APPS', defaultValue: true, description: 'With ACTION=up, deploy the k8s/ manifests once the cluster is ready')
+    }
+
+    environment {
+        TF_DIR           = 'terraform/gke'
+        TF_IN_AUTOMATION = 'true'
+        TF_INPUT         = '0'
+        NAMESPACE        = 'otel-demo'
+        GOOGLE_APPLICATION_CREDENTIALS = credentials('GCP_TERRAFORM_KEY')
+    }
+
+    stages {
+        stage('Prepare') {
+            steps {
+                script {
+                    env.CLOUDSDK_CONFIG = "${env.WORKSPACE}/.gcloud"
+                    env.KUBECONFIG = "${env.WORKSPACE}/.kube/config"
+                    env.TF_PLUGIN_CACHE_DIR = sh(script: 'echo "$HOME/.terraform.d/plugin-cache"', returnStdout: true).trim()
+                    currentBuild.description = params.ACTION == 'down' ? 'down' :
+                        "${params.ACTION} : ${params.MACHINE_TYPE} x ${params.NODE_COUNT}" + (params.SPOT ? ' (spot)' : '')
+                }
+                sh '''
+                    mkdir -p "$TF_PLUGIN_CACHE_DIR" "$(dirname "$KUBECONFIG")"
+                    terraform -version
+                    kubectl version --client
+                    gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
+                '''
+            }
+        }
+
+        stage('Terraform init') {
+            steps {
+                sh 'terraform -chdir="$TF_DIR" init'
+            }
+        }
+
+        stage('Terraform plan') {
+            when { expression { params.ACTION == 'plan' || params.ACTION == 'up' } }
+            steps {
+                sh "terraform -chdir=\"\$TF_DIR\" plan ${tfVars()} -out=otel-demo.tfplan"
+            }
+        }
+
+        stage('Terraform apply') {
+            when { expression { params.ACTION == 'up' } }
+            steps {
+                sh 'terraform -chdir="$TF_DIR" apply otel-demo.tfplan'
+            }
+        }
+
+        stage('Deploy apps') {
+            when { expression { params.ACTION == 'up' && params.DEPLOY_APPS } }
+            steps {
+                script { connectToCluster(false) }
+                sh '''
+                    kubectl apply --server-side --field-manager=jenkins -f k8s/namespace.yaml
+                    kubectl apply --server-side --field-manager=jenkins -R -f k8s/
+                '''
+                catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
+                    sh 'kubectl -n "$NAMESPACE" wait --for=condition=Available deployment --all --timeout=15m'
+                }
+                sh '''
+                    kubectl -n "$NAMESPACE" get pods -o wide
+                    echo "Connect from your machine:"
+                    echo "  $(terraform -chdir="$TF_DIR" output -raw get_credentials_command)"
+                    echo "  kubectl -n $NAMESPACE port-forward svc/frontend-proxy 8080:8080"
+                '''
+            }
+        }
+
+        stage('Confirm delete') {
+            when { expression { params.ACTION == 'down' } }
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    input message: 'Delete the GKE cluster and everything running on it?', ok: 'Yes, delete it'
+                }
+            }
+        }
+
+        stage('Remove apps') {
+            when { expression { params.ACTION == 'down' } }
+            steps {
+                script {
+                    if (connectToCluster(true)) {
+                        sh 'kubectl delete namespace "$NAMESPACE" --ignore-not-found --timeout=5m || true'
+                    } else {
+                        echo 'No cluster found in the Terraform state, nothing to remove'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform destroy') {
+            when { expression { params.ACTION == 'down' } }
+            steps {
+                sh "terraform -chdir=\"\$TF_DIR\" destroy -auto-approve ${tfVars()}"
+            }
+        }
+    }
+
+    post {
+        cleanup {
+            cleanWs()
+        }
+    }
+}
+
+def tfVars() {
+    return "-var machine_type=${params.MACHINE_TYPE} -var node_count=${params.NODE_COUNT} -var spot=${params.SPOT}"
+}
+
+def connectToCluster(boolean optional) {
+    def cmd = '''
+        name=$(terraform -chdir="$TF_DIR" output -raw cluster_name)
+        zone=$(terraform -chdir="$TF_DIR" output -raw location)
+        project=$(terraform -chdir="$TF_DIR" output -raw project_id)
+        gcloud container clusters get-credentials "$name" --zone "$zone" --project "$project"
+        kubectl cluster-info
+    '''
+    if (optional) {
+        return sh(script: cmd, returnStatus: true) == 0
+    }
+    sh cmd
+    return true
+}

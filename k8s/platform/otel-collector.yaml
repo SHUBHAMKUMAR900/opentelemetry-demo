@@ -357,6 +357,9 @@ data:
     #     logs:
     #       exporters: [opensearch, debug, otlp_grpc/mybackend]                     # repeat upstream exporters
   otelcol-config-k8s.yml: |
+    receivers:
+      host_metrics:
+        root_path: /
     service:
       pipelines:
         metrics:

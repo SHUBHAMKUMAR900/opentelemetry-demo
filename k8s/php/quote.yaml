@@ -22,7 +22,7 @@ spec:
       enableServiceLinks: false
       containers:
       - name: quote
-        image: asia-south1-docker.pkg.dev/ct-lens/otel/quote:1-49a14f6
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/quote:2-f73a03c
         ports:
         - name: port-8090
           containerPort: 8090

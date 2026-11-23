@@ -44,3 +44,9 @@ curl --location 'http://localhost:8999/getquote' \
 --header 'Content-Type: application/json' \
 --data '{"numberOfItems":3}'
 ```
+
+## Deployment
+
+This service is deployed to the on-demand GKE cluster by the
+`terraform/terraform_pipeline` Jenkins job, using the image built by
+`php/php-service-pipeline`.

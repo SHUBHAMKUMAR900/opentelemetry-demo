@@ -148,7 +148,6 @@ type checkout struct {
 	shippingSvcAddr       string
 	emailSvcAddr          string
 	paymentSvcAddr        string
-	taxSvcAddr            string
 	kafkaBrokerSvcAddr    string
 	pb.UnimplementedCheckoutServiceServer
 	KafkaProducerClient     sarama.AsyncProducer
@@ -245,8 +244,6 @@ func main() {
 	c = mustCreateClient(svc.paymentSvcAddr)
 	svc.paymentSvcClient = pb.NewPaymentServiceClient(c)
 	defer c.Close()
-
-	mustMapEnv(&svc.taxSvcAddr, "TAX_SERVICE_ADDR")
 
 	svc.kafkaBrokerSvcAddr = os.Getenv("KAFKA_ADDR")
 

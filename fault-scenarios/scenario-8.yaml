@@ -1,0 +1,7 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+components:
+  product-catalog:
+    envOverrides:
+      - name: DB_MAX_OPEN_CONNS
+        value: '2'

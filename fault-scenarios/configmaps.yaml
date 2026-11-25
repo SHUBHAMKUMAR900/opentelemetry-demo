@@ -1,0 +1,17 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: otel-demo
+data:
+  CART_ADDR: cart:8080
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: product-catalog-config
+  namespace: otel-demo
+data:
+  DB_MAX_OPEN_CONNS: '10'

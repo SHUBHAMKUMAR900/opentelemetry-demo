@@ -1,0 +1,36 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+# Healthy state of every component the scenarios touch. run.sh passes this file
+# on every helm upgrade, so each scenario starts from here even when an earlier
+# one was rolled back with kubectl instead of helm.
+components:
+  product-catalog:
+    imageOverride:
+      repository: asia-south1-docker.pkg.dev/ct-lens/otel/product-catalog
+      tag: GOOD_TAG_PENDING
+    envOverrides:
+      - name: DB_MAX_OPEN_CONNS
+        valueFrom:
+          configMapKeyRef:
+            name: product-catalog-config
+            key: DB_MAX_OPEN_CONNS
+  frontend:
+    envOverrides:
+      - name: CART_ADDR
+        valueFrom:
+          configMapKeyRef:
+            name: frontend-config
+            key: CART_ADDR
+  checkout:
+    imageOverride:
+      repository: ghcr.io/open-telemetry/demo
+      tag: 3.1.0-checkout
+  payment:
+    resources:
+      limits:
+        memory: 140Mi
+  email:
+    imageOverride:
+      repository: ghcr.io/open-telemetry/demo
+      tag: 3.1.0-email

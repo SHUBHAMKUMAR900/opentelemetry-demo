@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+
+set -euo pipefail
+
+RELEASE=astronomy
+NAMESPACE=otel-demo
+CHART=opentelemetry-demo
+CHART_REPO=https://open-telemetry.github.io/opentelemetry-helm-charts
+CHART_VERSION=0.42.7
+REGISTRY=asia-south1-docker.pkg.dev/ct-lens/otel
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ORIGINAL_REVISION_FILE="$HOME/.fault-scenarios-original-revision"
+
+usage() {
+    cat <<'EOF'
+Usage: ./run.sh <command>
+
+  setup        Save the current Helm revision, create the ConfigMaps and deploy the healthy baseline
+  1            Bad deploy: product-catalog image whose GetProduct endpoint fails
+  2            Bad deploy: product-catalog image with a slow ListProducts query
+  3            Bad deploy: checkout image that crash-loops on a missing setting
+  4            Bad deploy: payment memory limit lowered (PAYMENT_MEMORY_LIMIT, default 40Mi)
+  5            Bad deploy: email image tag that does not exist
+  6            Config: frontend-config points CART_ADDR at a host that does not exist
+  7            Config: product-catalog-config shrinks the DB pool from 10 to 2
+  8            Config: same pool change through an environment variable
+  revert <n>   Undo scenario n by hand, if Lens did not
+  status       Show the Helm revision, the touched deployments and every pod that is not healthy
+  restore      Roll the release back to the revision saved by setup and delete the ConfigMaps
+EOF
+}
+
+log() {
+    echo "[$(TZ=Asia/Kolkata date '+%H:%M:%S IST')] $*"
+}
+
+upgrade() {
+    if grep -q GOOD_TAG_PENDING "$DIR/baseline.yaml"; then
+        echo "baseline.yaml has no product-catalog image tag yet" >&2
+        exit 1
+    fi
+    helm upgrade "$RELEASE" "$CHART" --repo "$CHART_REPO" --version "$CHART_VERSION" \
+        --namespace "$NAMESPACE" --reuse-values -f "$DIR/baseline.yaml" "$@"
+}
+
+set_config() {
+    kubectl -n "$NAMESPACE" patch configmap "$1" --type merge -p "{\"data\":{\"$2\":\"$3\"}}"
+}
+
+restart() {
+    kubectl -n "$NAMESPACE" rollout restart "deployment/$1"
+}
+
+case "${1:-}" in
+    setup)
+        if [ ! -f "$ORIGINAL_REVISION_FILE" ]; then
+            helm history "$RELEASE" -n "$NAMESPACE" -o json | jq '.[-1].revision' > "$ORIGINAL_REVISION_FILE"
+        fi
+        log "Original Helm revision: $(cat "$ORIGINAL_REVISION_FILE")"
+        kubectl apply -f "$DIR/configmaps.yaml"
+        upgrade
+        kubectl -n "$NAMESPACE" rollout status deployment/product-catalog --timeout=5m
+        kubectl -n "$NAMESPACE" rollout status deployment/frontend --timeout=5m
+        log "Baseline is ready"
+        ;;
+    1)
+        log "Scenario 1 started: product-catalog bad-get-product-errors"
+        upgrade --set components.product-catalog.imageOverride.tag=bad-get-product-errors
+        ;;
+    2)
+        log "Scenario 2 started: product-catalog bad-slow-query"
+        upgrade --set components.product-catalog.imageOverride.tag=bad-slow-query
+        ;;
+    3)
+        log "Scenario 3 started: checkout bad-missing-config"
+        upgrade --set components.checkout.imageOverride.repository="$REGISTRY/checkout" \
+            --set components.checkout.imageOverride.tag=bad-missing-config
+        ;;
+    4)
+        log "Scenario 4 started: payment memory limit ${PAYMENT_MEMORY_LIMIT:-40Mi}"
+        upgrade --set components.payment.resources.limits.memory="${PAYMENT_MEMORY_LIMIT:-40Mi}"
+        ;;
+    5)
+        log "Scenario 5 started: email image tag 3.1.0-emial"
+        upgrade --set components.email.imageOverride.tag=3.1.0-emial
+        ;;
+    6)
+        log "Scenario 6 started: frontend-config CART_ADDR=cart-v2:8080"
+        set_config frontend-config CART_ADDR cart-v2:8080
+        restart frontend
+        ;;
+    7)
+        log "Scenario 7 started: product-catalog-config DB_MAX_OPEN_CONNS=2"
+        set_config product-catalog-config DB_MAX_OPEN_CONNS 2
+        restart product-catalog
+        ;;
+    8)
+        log "Scenario 8 started: product-catalog env DB_MAX_OPEN_CONNS=2"
+        upgrade -f "$DIR/scenario-8.yaml"
+        ;;
+    revert)
+        case "${2:-}" in
+            1|2|3|4|5|8)
+                upgrade
+                ;;
+            6)
+                set_config frontend-config CART_ADDR cart:8080
+                restart frontend
+                ;;
+            7)
+                set_config product-catalog-config DB_MAX_OPEN_CONNS 10
+                restart product-catalog
+                ;;
+            *)
+                usage
+                exit 1
+                ;;
+        esac
+        log "Scenario ${2} reverted"
+        ;;
+    status)
+        helm history "$RELEASE" -n "$NAMESPACE" --max 3
+        echo
+        kubectl -n "$NAMESPACE" get deployment product-catalog checkout payment email frontend \
+            -o custom-columns='NAME:.metadata.name,READY:.status.readyReplicas,UPDATED:.status.updatedReplicas,IMAGE:.spec.template.spec.containers[0].image'
+        echo
+        unhealthy=$(kubectl -n "$NAMESPACE" get pods --no-headers |
+            awk '{split($2, r, "/"); if ($3 != "Completed" && ($3 != "Running" || r[1] != r[2])) print}')
+        if [ -n "$unhealthy" ]; then
+            echo "Pods that are not healthy:"
+            echo "$unhealthy"
+        else
+            echo "All pods are healthy"
+        fi
+        ;;
+    restore)
+        if [ ! -f "$ORIGINAL_REVISION_FILE" ]; then
+            echo "No saved revision, run setup first" >&2
+            exit 1
+        fi
+        helm rollback "$RELEASE" "$(cat "$ORIGINAL_REVISION_FILE")" -n "$NAMESPACE" --wait --timeout 10m
+        kubectl delete -f "$DIR/configmaps.yaml" --ignore-not-found
+        rm -f "$ORIGINAL_REVISION_FILE"
+        log "Release restored to its state before the tests"
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac

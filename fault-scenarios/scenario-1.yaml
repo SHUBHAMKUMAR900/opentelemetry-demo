@@ -1,0 +1,10 @@
+# Copyright The OpenTelemetry Authors
+# SPDX-License-Identifier: Apache-2.0
+components:
+  product-catalog:
+    imageOverride:
+      repository: asia-south1-docker.pkg.dev/ct-lens/otel/product-catalog
+      tag: bad-get-product-errors
+    envOverrides:
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: service.version=3.1.1,service.criticality=high

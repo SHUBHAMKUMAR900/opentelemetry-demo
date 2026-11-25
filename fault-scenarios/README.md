@@ -24,9 +24,9 @@ Then run one scenario at a time and leave 5 to 10 minutes between them:
 
 | Command | Type | Service | Change | Expected Lens action |
 | --- | --- | --- | --- | --- |
-| `./run.sh 1` | Bad deploy | product-catalog | Image `bad-get-product-errors`: GetProduct queries a column that does not exist | Roll back |
-| `./run.sh 2` | Bad deploy | product-catalog | Image `bad-slow-query`: ListProducts takes 0.5 s longer | Roll back |
-| `./run.sh 3` | Bad deploy | checkout | Image `bad-missing-config`: needs `TAX_SERVICE_ADDR`, crash-loops without it | Roll back |
+| `./run.sh 1` | Bad deploy | product-catalog | Image `bad-get-product-errors`, service.version 3.1.1: GetProduct queries a column that does not exist | Roll back |
+| `./run.sh 2` | Bad deploy | product-catalog | Image `bad-slow-query`, service.version 3.1.2: ListProducts takes 0.5 s longer | Roll back |
+| `./run.sh 3` | Bad deploy | checkout | Image `bad-missing-config`, service.version 3.1.1: needs `TAX_SERVICE_ADDR`, crash-loops without it | Roll back |
 | `./run.sh 4` | Bad deploy | payment | Memory limit 140Mi to 40Mi (`PAYMENT_MEMORY_LIMIT`) | Restore the limit |
 | `./run.sh 5` | Bad deploy | email | Image tag `3.1.0-emial` does not exist | Roll back |
 | `./run.sh 6` | Config | frontend | `frontend-config` points `CART_ADDR` at `cart-v2:8080` | Revert and restart |
@@ -76,3 +76,8 @@ Pipeline to service mapping.
 
 The bad images are built by the Go Jenkins pipeline with `CUSTOM_TAG` set to the
 image tag above, from a commit that is reverted right after the build.
+
+The chart sets `service.version` to the chart's app version (3.1.0) on every
+service, whatever image runs. Scenarios 1 to 3 therefore also set a new
+`service.version` through `OTEL_RESOURCE_ATTRIBUTES`, because Lens detects a
+deploy from a change of that attribute in the telemetry.

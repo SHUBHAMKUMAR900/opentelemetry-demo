@@ -21,6 +21,7 @@ components:
     imageOverride:
       repository: ghcr.io/open-telemetry/demo
       tag: 3.1.0-checkout
+    envOverrides: []
   payment:
     resources:
       limits:

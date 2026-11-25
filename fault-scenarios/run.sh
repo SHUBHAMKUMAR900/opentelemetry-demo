@@ -9,7 +9,6 @@ NAMESPACE=otel-demo
 CHART=opentelemetry-demo
 CHART_REPO=https://open-telemetry.github.io/opentelemetry-helm-charts
 CHART_VERSION=0.42.7
-REGISTRY=asia-south1-docker.pkg.dev/ct-lens/otel
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORIGINAL_REVISION_FILE="$HOME/.fault-scenarios-original-revision"
 
@@ -119,19 +118,16 @@ case "${1:-}" in
         log "Baseline is ready"
         ;;
     1)
-        log "Scenario 1 started: product-catalog bad-get-product-errors"
-        upgrade --set components.product-catalog.imageOverride.repository="$REGISTRY/product-catalog" \
-            --set components.product-catalog.imageOverride.tag=bad-get-product-errors
+        log "Scenario 1 started: product-catalog bad-get-product-errors, service.version 3.1.1"
+        upgrade -f "$DIR/scenario-1.yaml"
         ;;
     2)
-        log "Scenario 2 started: product-catalog bad-slow-query"
-        upgrade --set components.product-catalog.imageOverride.repository="$REGISTRY/product-catalog" \
-            --set components.product-catalog.imageOverride.tag=bad-slow-query
+        log "Scenario 2 started: product-catalog bad-slow-query, service.version 3.1.2"
+        upgrade -f "$DIR/scenario-2.yaml"
         ;;
     3)
-        log "Scenario 3 started: checkout bad-missing-config"
-        upgrade --set components.checkout.imageOverride.repository="$REGISTRY/checkout" \
-            --set components.checkout.imageOverride.tag=bad-missing-config
+        log "Scenario 3 started: checkout bad-missing-config, service.version 3.1.1"
+        upgrade -f "$DIR/scenario-3.yaml"
         ;;
     4)
         log "Scenario 4 started: payment memory limit ${PAYMENT_MEMORY_LIMIT:-40Mi}"

@@ -8,7 +8,7 @@ components:
   product-catalog:
     imageOverride:
       repository: asia-south1-docker.pkg.dev/ct-lens/otel/product-catalog
-      tag: GOOD_TAG_PENDING
+      tag: 4-5cf09bb
     envOverrides:
       - name: DB_MAX_OPEN_CONNS
         valueFrom:

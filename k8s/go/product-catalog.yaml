@@ -86,7 +86,7 @@ spec:
       enableServiceLinks: false
       containers:
       - name: product-catalog
-        image: asia-south1-docker.pkg.dev/ct-lens/otel/product-catalog:v1.1.10
+        image: asia-south1-docker.pkg.dev/ct-lens/otel/product-catalog:4-5cf09bb
         ports:
         - name: port-3550
           containerPort: 3550

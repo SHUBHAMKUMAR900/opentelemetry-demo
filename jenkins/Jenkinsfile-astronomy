@@ -71,6 +71,9 @@ pipeline {
                     withEnv(["PATH+HELM=${env.HELM_BIN_DIR}"]) {
                         sh "fault-scenarios/run.sh ${command}"
                     }
+                    if (params.ACTION == 'status') {
+                        currentBuild.result = 'NOT_BUILT'
+                    }
                 }
             }
         }

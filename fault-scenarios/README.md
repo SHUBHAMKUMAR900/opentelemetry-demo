@@ -15,8 +15,10 @@ gcloud container clusters get-credentials astronomy-gke --zone asia-south1-a --p
 ```
 
 `setup` saves the current Helm revision, creates the two ConfigMaps and deploys
-the healthy baseline: product-catalog runs our image that reads
-`DB_MAX_OPEN_CONNS`, and frontend reads `CART_ADDR` from a ConfigMap.
+the healthy baseline: product-catalog keeps the original 3.1.0 image, and
+frontend reads `CART_ADDR` from a ConfigMap. Scenarios 7 and 8 need a
+product-catalog image that reads `DB_MAX_OPEN_CONNS`, which the original image
+does not.
 
 Then run one scenario at a time and leave 5 to 10 minutes between them:
 

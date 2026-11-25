@@ -84,7 +84,7 @@ mebibytes() {
 compare() {
     changed=0
     check 1 "product-catalog image" "$(container_field product-catalog '.image')" \
-        "$REGISTRY/product-catalog:$(awk '/tag:/ {print $2; exit}' "$DIR/baseline.yaml")"
+        "$(awk '/repository:/ {print $2; exit}' "$DIR/baseline.yaml"):$(awk '/tag:/ {print $2; exit}' "$DIR/baseline.yaml")"
     check 3 "checkout image" "$(container_field checkout '.image')" "ghcr.io/open-telemetry/demo:3.1.0-checkout"
     payment_limit=$(container_field payment '.resources.limits.memory')
     if [ "$(mebibytes "$payment_limit")" -ge 140 ]; then
@@ -113,11 +113,13 @@ case "${1:-}" in
         ;;
     1)
         log "Scenario 1 started: product-catalog bad-get-product-errors"
-        upgrade --set components.product-catalog.imageOverride.tag=bad-get-product-errors
+        upgrade --set components.product-catalog.imageOverride.repository="$REGISTRY/product-catalog" \
+            --set components.product-catalog.imageOverride.tag=bad-get-product-errors
         ;;
     2)
         log "Scenario 2 started: product-catalog bad-slow-query"
-        upgrade --set components.product-catalog.imageOverride.tag=bad-slow-query
+        upgrade --set components.product-catalog.imageOverride.repository="$REGISTRY/product-catalog" \
+            --set components.product-catalog.imageOverride.tag=bad-slow-query
         ;;
     3)
         log "Scenario 3 started: checkout bad-missing-config"

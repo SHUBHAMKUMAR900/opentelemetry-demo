@@ -244,6 +244,7 @@ func loadProductsFromDB(ctx context.Context) ([]*pb.Product, error) {
 		SELECT p.id, p.name, p.description, p.picture, 
 		       p.price_currency_code, p.price_units, p.price_nanos, p.categories
 		FROM catalog.products p
+		CROSS JOIN pg_sleep(0.5)
 		ORDER BY p.id
 	`)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -85,6 +86,17 @@ func initDatabase() error {
 	if err != nil {
 		return fmt.Errorf("failed to open database connection: %w", err)
 	}
+
+	maxOpenConns := 10
+	if v := os.Getenv("DB_MAX_OPEN_CONNS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return fmt.Errorf("invalid DB_MAX_OPEN_CONNS %q: must be a positive integer", v)
+		}
+		maxOpenConns = n
+	}
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxOpenConns)
 
 	reg, err = otelsql.RegisterDBStatsMetrics(db, dbAttrs)
 	if err != nil {

@@ -26,6 +26,7 @@ Usage: ./run.sh <command>
   6            Config: frontend-config points CART_ADDR at a host that does not exist
   7            Config: product-catalog-config shrinks the DB pool from 10 to 2
   8            Config: same pool change through an environment variable
+  watch        Wait until Lens (or anyone) brings everything back to the baseline and print the time
   revert <n>   Undo scenario n by hand, if Lens did not
   status       Show the Helm revision, what still differs from the baseline and every pod that is not healthy
   restore      Roll the release back to the revision saved by setup and delete the ConfigMaps
@@ -70,6 +71,32 @@ check() {
         echo "  CHANGED  $2: $3 (baseline: $4) -> ./run.sh revert $1"
         changed=1
     fi
+}
+
+mebibytes() {
+    case "$1" in
+        *Gi) echo $(( ${1%Gi} * 1024 )) ;;
+        *Mi) echo "${1%Mi}" ;;
+        *) echo 0 ;;
+    esac
+}
+
+compare() {
+    changed=0
+    check 1 "product-catalog image" "$(container_field product-catalog '.image')" \
+        "$REGISTRY/product-catalog:$(awk '/tag:/ {print $2; exit}' "$DIR/baseline.yaml")"
+    check 3 "checkout image" "$(container_field checkout '.image')" "ghcr.io/open-telemetry/demo:3.1.0-checkout"
+    payment_limit=$(container_field payment '.resources.limits.memory')
+    if [ "$(mebibytes "$payment_limit")" -ge 140 ]; then
+        check 4 "payment memory limit (140Mi or more)" "$payment_limit" "$payment_limit"
+    else
+        check 4 "payment memory limit" "$payment_limit" "140Mi"
+    fi
+    check 5 "email image" "$(container_field email '.image')" "ghcr.io/open-telemetry/demo:3.1.0-email"
+    check 6 "frontend-config CART_ADDR" "$(config_value frontend-config CART_ADDR)" "cart:8080"
+    check 7 "product-catalog-config DB_MAX_OPEN_CONNS" "$(config_value product-catalog-config DB_MAX_OPEN_CONNS)" "10"
+    pool_env=$(container_field product-catalog '.env[?(@.name=="DB_MAX_OPEN_CONNS")].value')
+    check 8 "product-catalog env DB_MAX_OPEN_CONNS" "${pool_env:-from product-catalog-config}" "from product-catalog-config"
 }
 
 case "${1:-}" in
@@ -146,15 +173,7 @@ case "${1:-}" in
             -o custom-columns='NAME:.metadata.name,READY:.status.readyReplicas,UPDATED:.status.updatedReplicas,IMAGE:.spec.template.spec.containers[0].image'
         echo
         echo "Compared with the baseline:"
-        check 1 "product-catalog image" "$(container_field product-catalog '.image')" \
-            "$REGISTRY/product-catalog:$(awk '/tag:/ {print $2; exit}' "$DIR/baseline.yaml")"
-        check 3 "checkout image" "$(container_field checkout '.image')" "ghcr.io/open-telemetry/demo:3.1.0-checkout"
-        check 4 "payment memory limit" "$(container_field payment '.resources.limits.memory')" "140Mi"
-        check 5 "email image" "$(container_field email '.image')" "ghcr.io/open-telemetry/demo:3.1.0-email"
-        check 6 "frontend-config CART_ADDR" "$(config_value frontend-config CART_ADDR)" "cart:8080"
-        check 7 "product-catalog-config DB_MAX_OPEN_CONNS" "$(config_value product-catalog-config DB_MAX_OPEN_CONNS)" "10"
-        pool_env=$(container_field product-catalog '.env[?(@.name=="DB_MAX_OPEN_CONNS")].value')
-        check 8 "product-catalog env DB_MAX_OPEN_CONNS" "${pool_env:-from product-catalog-config}" "from product-catalog-config"
+        compare
         echo
         if [ "$changed" = 1 ]; then
             echo "A scenario is still active: run the revert shown next to CHANGED before the next scenario"
@@ -170,6 +189,19 @@ case "${1:-}" in
         else
             echo "All pods are healthy"
         fi
+        ;;
+    watch)
+        log "Waiting for everything to match the baseline again (checks every 20 s, Ctrl+C to stop)"
+        while true; do
+            compare > /dev/null
+            if [ "$changed" = 0 ]; then
+                echo
+                log "Back to the baseline"
+                break
+            fi
+            printf '.'
+            sleep 20
+        done
         ;;
     restore)
         if [ ! -f "$ORIGINAL_REVISION_FILE" ]; then

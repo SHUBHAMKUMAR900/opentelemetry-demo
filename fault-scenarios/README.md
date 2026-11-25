@@ -40,6 +40,10 @@ Other commands:
   from the baseline with the revert command for it, and every pod that is not
   healthy. Scenarios 1, 2, 6, 7 and 8 keep all pods healthy, so check the
   baseline comparison, not the pod list, before starting the next scenario.
+- `./run.sh watch` waits, checking every 20 seconds, until everything matches
+  the baseline again and prints the time. Start it right after a scenario to
+  record when Lens rolled it back. A payment memory limit of 140Mi or more
+  counts as fixed.
 - `./run.sh revert <n>` undoes scenario `n` when Lens did not.
 - `./run.sh restore` rolls the release back to the revision saved by `setup`
   and deletes the ConfigMaps. Run it once all scenarios are done.

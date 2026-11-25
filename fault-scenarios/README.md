@@ -50,5 +50,22 @@ Other commands:
 - `./run.sh restore` rolls the release back to the revision saved by `setup`
   and deletes the ConfigMaps. Run it once all scenarios are done.
 
+## From Jenkins
+
+`jenkins/Jenkinsfile-astronomy` runs the same script from Jenkins, so every
+deploy and rollback shows up as a Jenkins build. Create a pipeline job from SCM
+with that script path, no build triggers, and run it with:
+
+- `ACTION=scenario`, `SCENARIO=<n>` to deploy a scenario
+- `ACTION=revert`, `SCENARIO=<n>` to undo it
+- `ACTION=baseline` to re-apply the healthy baseline
+- `ACTION=status` to see what differs from the baseline
+- `ACTION=restore` after the last scenario
+
+It authenticates with the `GCP_TERRAFORM_KEY` credential and downloads a pinned
+Helm release on first use. `watch` stays in Cloud Shell, since it only reads.
+
+## Images
+
 The bad images are built by the Go Jenkins pipeline with `CUSTOM_TAG` set to the
 image tag above, from a commit that is reverted right after the build.

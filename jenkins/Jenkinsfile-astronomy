@@ -1,0 +1,78 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '50'))
+        timeout(time: 20, unit: 'MINUTES')
+    }
+
+    parameters {
+        choice(name: 'ACTION', choices: ['status', 'scenario', 'revert', 'baseline', 'restore'], description: 'status: show what differs from the baseline. scenario: deploy SCENARIO. revert: undo SCENARIO. baseline: re-apply the healthy baseline. restore: roll the release back to ORIGINAL_REVISION and delete the ConfigMaps')
+        choice(name: 'SCENARIO', choices: ['1', '2', '3', '4', '5', '6', '7', '8'], description: 'Scenario number for ACTION=scenario or revert, see fault-scenarios/README.md')
+        string(name: 'PAYMENT_MEMORY_LIMIT', defaultValue: '40Mi', trim: true, description: 'Memory limit that scenario 4 sets on payment')
+        string(name: 'ORIGINAL_REVISION', defaultValue: '4', trim: true, description: 'Helm revision of the astronomy release that restore rolls back to')
+    }
+
+    environment {
+        CLUSTER      = 'astronomy-gke'
+        ZONE         = 'asia-south1-a'
+        PROJECT      = 'ct-lens'
+        HELM_VERSION = 'v4.3.2'
+        GOOGLE_APPLICATION_CREDENTIALS = credentials('GCP_TERRAFORM_KEY')
+    }
+
+    stages {
+        stage('Prepare') {
+            steps {
+                script {
+                    env.CLOUDSDK_CONFIG = "${env.WORKSPACE}/.gcloud"
+                    env.KUBECONFIG = "${env.WORKSPACE}/.kube/config"
+                    env.HELM_BIN_DIR = sh(script: 'echo "$HOME/.cache/helm-bin/$HELM_VERSION"', returnStdout: true).trim()
+                    currentBuild.description = (params.ACTION == 'scenario' || params.ACTION == 'revert') ?
+                        "${params.ACTION} ${params.SCENARIO}" : params.ACTION
+                }
+                sh '''
+                    if [ ! -x "$HELM_BIN_DIR/helm" ]; then
+                        mkdir -p "$HELM_BIN_DIR"
+                        cd "$HELM_BIN_DIR"
+                        curl -fsSLO "https://get.helm.sh/helm-$HELM_VERSION-linux-amd64.tar.gz"
+                        curl -fsSLO "https://get.helm.sh/helm-$HELM_VERSION-linux-amd64.tar.gz.sha256sum"
+                        sha256sum -c "helm-$HELM_VERSION-linux-amd64.tar.gz.sha256sum"
+                        tar -xzf "helm-$HELM_VERSION-linux-amd64.tar.gz" --strip-components=1 linux-amd64/helm
+                        rm -f "helm-$HELM_VERSION-linux-amd64.tar.gz" "helm-$HELM_VERSION-linux-amd64.tar.gz.sha256sum"
+                    fi
+                    "$HELM_BIN_DIR/helm" version
+                    mkdir -p "$(dirname "$KUBECONFIG")"
+                    gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
+                    gcloud container clusters get-credentials "$CLUSTER" --zone "$ZONE" --project "$PROJECT"
+                '''
+            }
+        }
+
+        stage('Run') {
+            steps {
+                script {
+                    def command = params.ACTION
+                    if (params.ACTION == 'scenario') {
+                        command = params.SCENARIO
+                    } else if (params.ACTION == 'revert') {
+                        command = "revert ${params.SCENARIO}"
+                    }
+                    withEnv(["PATH+HELM=${env.HELM_BIN_DIR}"]) {
+                        sh "fault-scenarios/run.sh ${command}"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        cleanup {
+            cleanWs()
+        }
+    }
+}

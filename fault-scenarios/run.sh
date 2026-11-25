@@ -109,7 +109,7 @@ compare() {
 case "${1:-}" in
     setup)
         if [ ! -f "$ORIGINAL_REVISION_FILE" ]; then
-            helm history "$RELEASE" -n "$NAMESPACE" -o json | jq '.[-1].revision' > "$ORIGINAL_REVISION_FILE"
+            helm history "$RELEASE" -n "$NAMESPACE" --max 1 | awk 'NR == 2 {print $1}' > "$ORIGINAL_REVISION_FILE"
         fi
         log "Original Helm revision: $(cat "$ORIGINAL_REVISION_FILE")"
         kubectl apply -f "$DIR/configmaps.yaml"
@@ -217,11 +217,15 @@ case "${1:-}" in
         done
         ;;
     restore)
-        if [ ! -f "$ORIGINAL_REVISION_FILE" ]; then
-            echo "No saved revision, run setup first" >&2
+        revision="${ORIGINAL_REVISION:-}"
+        if [ -z "$revision" ] && [ -f "$ORIGINAL_REVISION_FILE" ]; then
+            revision=$(cat "$ORIGINAL_REVISION_FILE")
+        fi
+        if [ -z "$revision" ]; then
+            echo "No saved revision: run setup first or set ORIGINAL_REVISION" >&2
             exit 1
         fi
-        helm rollback "$RELEASE" "$(cat "$ORIGINAL_REVISION_FILE")" -n "$NAMESPACE" --wait --timeout 10m
+        helm rollback "$RELEASE" "$revision" -n "$NAMESPACE" --wait --timeout 10m
         kubectl delete -f "$DIR/configmaps.yaml" --ignore-not-found
         rm -f "$ORIGINAL_REVISION_FILE"
         log "Release restored to its state before the tests"

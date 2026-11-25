@@ -9,12 +9,7 @@ components:
     imageOverride:
       repository: ghcr.io/open-telemetry/demo
       tag: 3.1.0-product-catalog
-    envOverrides:
-      - name: DB_MAX_OPEN_CONNS
-        valueFrom:
-          configMapKeyRef:
-            name: product-catalog-config
-            key: DB_MAX_OPEN_CONNS
+    envOverrides: []
   frontend:
     envOverrides:
       - name: CART_ADDR

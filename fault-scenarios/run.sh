@@ -26,6 +26,7 @@ Usage: ./run.sh <command>
   6            Config: frontend-config points CART_ADDR at a host that does not exist
   7            Config: product-catalog-config shrinks the DB pool from 10 to 2
   8            Config: same pool change through an environment variable
+  baseline     Re-apply the healthy baseline through Helm
   watch        Wait until Lens (or anyone) brings everything back to the baseline and print the time
   revert <n>   Undo scenario n by hand, if Lens did not
   status       Show the Helm revision, what still differs from the baseline and every pod that is not healthy
@@ -95,8 +96,14 @@ compare() {
     check 5 "email image" "$(container_field email '.image')" "ghcr.io/open-telemetry/demo:3.1.0-email"
     check 6 "frontend-config CART_ADDR" "$(config_value frontend-config CART_ADDR)" "cart:8080"
     check 7 "product-catalog-config DB_MAX_OPEN_CONNS" "$(config_value product-catalog-config DB_MAX_OPEN_CONNS)" "10"
+    pool_env_name=$(container_field product-catalog '.env[?(@.name=="DB_MAX_OPEN_CONNS")].name')
     pool_env=$(container_field product-catalog '.env[?(@.name=="DB_MAX_OPEN_CONNS")].value')
-    check 8 "product-catalog env DB_MAX_OPEN_CONNS" "${pool_env:-from product-catalog-config}" "from product-catalog-config"
+    if [ -z "$pool_env_name" ]; then
+        pool_env="not set"
+    elif [ -z "$pool_env" ]; then
+        pool_env="set from a ConfigMap"
+    fi
+    check 8 "product-catalog env DB_MAX_OPEN_CONNS" "$pool_env" "not set"
 }
 
 case "${1:-}" in
@@ -147,6 +154,10 @@ case "${1:-}" in
     8)
         log "Scenario 8 started: product-catalog env DB_MAX_OPEN_CONNS=2"
         upgrade -f "$DIR/scenario-8.yaml"
+        ;;
+    baseline)
+        upgrade
+        log "Baseline re-applied"
         ;;
     revert)
         case "${2:-}" in

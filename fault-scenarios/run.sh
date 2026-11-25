@@ -11,6 +11,7 @@ CHART_REPO=https://open-telemetry.github.io/opentelemetry-helm-charts
 CHART_VERSION=0.42.7
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORIGINAL_REVISION_FILE="$HOME/.fault-scenarios-original-revision"
+LENS_URL="${LENS_URL:-http://104.198.168.204:9108}"
 
 usage() {
     cat <<'EOF'
@@ -52,6 +53,25 @@ set_config() {
 
 restart() {
     kubectl -n "$NAMESPACE" rollout restart "deployment/$1"
+}
+
+record_deploy() {
+    local token by payload code
+    if ! token=$(kubectl -n "$NAMESPACE" get secret lens-ingest -o jsonpath='{.data.token}' | base64 -d) || [ -z "$token" ]; then
+        log "Could not read the lens-ingest token, so the $1 deploy is not recorded in Lens"
+        return 0
+    fi
+    by=cloud-shell
+    if [ -n "${BUILD_URL:-}" ]; then
+        by=jenkins
+    fi
+    payload=$(printf '{"service":"%s","version":"%s","description":"%s","deployed_by":"%s"}' "$1" "$2" "$3" "$by")
+    if [ -n "${LENS_REPO:-}" ]; then
+        payload="${payload%\}},\"repo\":\"$LENS_REPO\"}"
+    fi
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -X POST "$LENS_URL/api/v1/deployments" \
+        -H 'Content-Type: application/json' -H "Authorization: Bearer $token" -d "$payload") || code=000
+    log "Lens deploy record for $1 $2: HTTP $code"
 }
 
 container_field() {
@@ -120,22 +140,27 @@ case "${1:-}" in
     1)
         log "Scenario 1 started: product-catalog bad-get-product-errors, service.version 3.1.1"
         upgrade -f "$DIR/scenario-1.yaml"
+        record_deploy product-catalog 3.1.1 "Show product ratings on the product page"
         ;;
     2)
         log "Scenario 2 started: product-catalog bad-slow-query, service.version 3.1.2"
         upgrade -f "$DIR/scenario-2.yaml"
+        record_deploy product-catalog 3.1.2 "Sort the product list by popularity"
         ;;
     3)
         log "Scenario 3 started: checkout bad-missing-config, service.version 3.1.1"
         upgrade -f "$DIR/scenario-3.yaml"
+        record_deploy checkout 3.1.1 "Calculate tax through the new tax service"
         ;;
     4)
         log "Scenario 4 started: payment memory limit ${PAYMENT_MEMORY_LIMIT:-40Mi}"
         upgrade --set components.payment.resources.limits.memory="${PAYMENT_MEMORY_LIMIT:-40Mi}"
+        record_deploy payment 3.1.0 "Lower the payment memory limit to ${PAYMENT_MEMORY_LIMIT:-40Mi}"
         ;;
     5)
         log "Scenario 5 started: email image tag 3.1.0-emial"
         upgrade --set components.email.imageOverride.tag=3.1.0-emial
+        record_deploy email 3.1.0-emial "Update the email image"
         ;;
     6)
         log "Scenario 6 started: frontend-config CART_ADDR=cart-v2:8080"
@@ -150,6 +175,7 @@ case "${1:-}" in
     8)
         log "Scenario 8 started: product-catalog env DB_MAX_OPEN_CONNS=2"
         upgrade -f "$DIR/scenario-8.yaml"
+        record_deploy product-catalog 3.1.0 "Update product-catalog settings"
         ;;
     baseline)
         upgrade
@@ -157,8 +183,21 @@ case "${1:-}" in
         ;;
     revert)
         case "${2:-}" in
-            1|2|3|4|5|8)
+            1|2|8)
                 upgrade
+                record_deploy product-catalog 3.1.0 "Roll back to 3.1.0"
+                ;;
+            3)
+                upgrade
+                record_deploy checkout 3.1.0 "Roll back to 3.1.0"
+                ;;
+            4)
+                upgrade
+                record_deploy payment 3.1.0 "Restore the payment memory limit"
+                ;;
+            5)
+                upgrade
+                record_deploy email 3.1.0 "Roll back to 3.1.0"
                 ;;
             6)
                 set_config frontend-config CART_ADDR cart:8080

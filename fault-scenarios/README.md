@@ -81,3 +81,10 @@ The chart sets `service.version` to the chart's app version (3.1.0) on every
 service, whatever image runs. Scenarios 1 to 3 therefore also set a new
 `service.version` through `OTEL_RESOURCE_ATTRIBUTES`, because Lens detects a
 deploy from a change of that attribute in the telemetry.
+
+Every helm deploy and revert is also recorded in Lens through
+`POST /api/v1/deployments`, authenticated with the `lens-ingest` secret that the
+collector already uses. Set `LENS_URL` to use another Lens address, and
+`LENS_REPO` to add the `repo` field when the tenant is resolved from GitHub.
+The ConfigMap scenarios (6 and 7) are config changes, not deploys, so they are
+not recorded.

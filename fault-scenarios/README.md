@@ -65,6 +65,13 @@ with that script path, no build triggers, and run it with:
 It authenticates with the `GCP_TERRAFORM_KEY` credential and downloads a pinned
 Helm release on first use. `watch` stays in Cloud Shell, since it only reads.
 
+Lens links a Jenkins job to an OTel service by the job name, so create one job
+per service from the same script path: `deploy-product-catalog` (scenarios 1,
+2, 7, 8), `deploy-checkout` (3), `deploy-payment` (4), `deploy-email` (5) and
+`deploy-frontend` (6). Each job refuses scenarios that belong to another
+service. In Lens, map each job to its service under Integrations, Jenkins,
+Pipeline to service mapping.
+
 ## Images
 
 The bad images are built by the Go Jenkins pipeline with `CUSTOM_TAG` set to the

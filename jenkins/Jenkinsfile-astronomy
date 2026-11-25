@@ -34,6 +34,12 @@ pipeline {
                     env.HELM_BIN_DIR = sh(script: 'echo "$HOME/.cache/helm-bin/$HELM_VERSION"', returnStdout: true).trim()
                     currentBuild.description = (params.ACTION == 'scenario' || params.ACTION == 'revert') ?
                         "${params.ACTION} ${params.SCENARIO}" : params.ACTION
+                    // Regex '^deploy-' drops the job name prefix, leaving the service name (deploy-checkout -> checkout)
+                    def service = env.JOB_BASE_NAME.replaceFirst('^deploy-', '')
+                    def allowed = scenariosFor(service)
+                    if (allowed && (params.ACTION == 'scenario' || params.ACTION == 'revert') && !allowed.contains(params.SCENARIO)) {
+                        error("${env.JOB_BASE_NAME} only runs scenarios ${allowed.join(', ')}, so that Lens links the deploy to ${service}")
+                    }
                 }
                 sh '''
                     if [ ! -x "$HELM_BIN_DIR/helm" ]; then
@@ -75,4 +81,15 @@ pipeline {
             cleanWs()
         }
     }
+}
+
+def scenariosFor(String service) {
+    def scenarios = [
+        'product-catalog': ['1', '2', '7', '8'],
+        'checkout'       : ['3'],
+        'payment'        : ['4'],
+        'email'          : ['5'],
+        'frontend'       : ['6']
+    ]
+    return scenarios[service]
 }

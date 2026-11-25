@@ -27,7 +27,7 @@ Usage: ./run.sh <command>
   7            Config: product-catalog-config shrinks the DB pool from 10 to 2
   8            Config: same pool change through an environment variable
   revert <n>   Undo scenario n by hand, if Lens did not
-  status       Show the Helm revision, the touched deployments and every pod that is not healthy
+  status       Show the Helm revision, what still differs from the baseline and every pod that is not healthy
   restore      Roll the release back to the revision saved by setup and delete the ConfigMaps
 EOF
 }
@@ -51,6 +51,25 @@ set_config() {
 
 restart() {
     kubectl -n "$NAMESPACE" rollout restart "deployment/$1"
+}
+
+container_field() {
+    kubectl -n "$NAMESPACE" get deployment "$1" -o jsonpath="{.spec.template.spec.containers[0]$2}"
+}
+
+config_value() {
+    kubectl -n "$NAMESPACE" get configmap "$1" -o jsonpath="{.data.$2}"
+}
+
+changed=0
+
+check() {
+    if [ "$3" = "$4" ]; then
+        echo "  ok       $2: $3"
+    else
+        echo "  CHANGED  $2: $3 (baseline: $4) -> ./run.sh revert $1"
+        changed=1
+    fi
 }
 
 case "${1:-}" in
@@ -125,6 +144,23 @@ case "${1:-}" in
         echo
         kubectl -n "$NAMESPACE" get deployment product-catalog checkout payment email frontend \
             -o custom-columns='NAME:.metadata.name,READY:.status.readyReplicas,UPDATED:.status.updatedReplicas,IMAGE:.spec.template.spec.containers[0].image'
+        echo
+        echo "Compared with the baseline:"
+        check 1 "product-catalog image" "$(container_field product-catalog '.image')" \
+            "$REGISTRY/product-catalog:$(awk '/tag:/ {print $2; exit}' "$DIR/baseline.yaml")"
+        check 3 "checkout image" "$(container_field checkout '.image')" "ghcr.io/open-telemetry/demo:3.1.0-checkout"
+        check 4 "payment memory limit" "$(container_field payment '.resources.limits.memory')" "140Mi"
+        check 5 "email image" "$(container_field email '.image')" "ghcr.io/open-telemetry/demo:3.1.0-email"
+        check 6 "frontend-config CART_ADDR" "$(config_value frontend-config CART_ADDR)" "cart:8080"
+        check 7 "product-catalog-config DB_MAX_OPEN_CONNS" "$(config_value product-catalog-config DB_MAX_OPEN_CONNS)" "10"
+        pool_env=$(container_field product-catalog '.env[?(@.name=="DB_MAX_OPEN_CONNS")].value')
+        check 8 "product-catalog env DB_MAX_OPEN_CONNS" "${pool_env:-from product-catalog-config}" "from product-catalog-config"
+        echo
+        if [ "$changed" = 1 ]; then
+            echo "A scenario is still active: run the revert shown next to CHANGED before the next scenario"
+        else
+            echo "Everything matches the baseline"
+        fi
         echo
         unhealthy=$(kubectl -n "$NAMESPACE" get pods --no-headers |
             awk '{split($2, r, "/"); if ($3 != "Completed" && ($3 != "Running" || r[1] != r[2])) print}')

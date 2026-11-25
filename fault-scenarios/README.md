@@ -36,8 +36,10 @@ old pod serving until the new one is ready, so only the rollout gets stuck.
 
 Other commands:
 
-- `./run.sh status` shows the Helm revision, the touched deployments and every
-  pod that is not healthy.
+- `./run.sh status` shows the Helm revision, every setting that still differs
+  from the baseline with the revert command for it, and every pod that is not
+  healthy. Scenarios 1, 2, 6, 7 and 8 keep all pods healthy, so check the
+  baseline comparison, not the pod list, before starting the next scenario.
 - `./run.sh revert <n>` undoes scenario `n` when Lens did not.
 - `./run.sh restore` rolls the release back to the revision saved by `setup`
   and deletes the ConfigMaps. Run it once all scenarios are done.

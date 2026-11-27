@@ -244,7 +244,6 @@ func loadProductsFromDB(ctx context.Context) ([]*pb.Product, error) {
 		SELECT p.id, p.name, p.description, p.picture, 
 		       p.price_currency_code, p.price_units, p.price_nanos, p.categories
 		FROM catalog.products p
-		CROSS JOIN pg_sleep(0.5)
 		ORDER BY p.id
 	`)
 	if err != nil {
@@ -295,7 +294,7 @@ func getProductFromDB(ctx context.Context, productID string) (*pb.Product, error
 	// Query single product by ID
 	row := db.QueryRowContext(ctx, `
 		SELECT p.id, p.name, p.description, p.picture, 
-		       p.price_currency_code, p.price_units, p.price_nanos, p.categories, p.rating
+		       p.price_currency_code, p.price_units, p.price_nanos, p.categories
 		FROM catalog.products p
 		WHERE p.id = $1
 	`, productID)
@@ -303,9 +302,8 @@ func getProductFromDB(ctx context.Context, productID string) (*pb.Product, error
 	var id, name, description, picture, currencyCode, categoriesStr string
 	var units int64
 	var nanos int32
-	var rating float64
 
-	if err := row.Scan(&id, &name, &description, &picture, &currencyCode, &units, &nanos, &categoriesStr, &rating); err != nil {
+	if err := row.Scan(&id, &name, &description, &picture, &currencyCode, &units, &nanos, &categoriesStr); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("product not found")
 		}

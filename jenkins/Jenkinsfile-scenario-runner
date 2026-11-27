@@ -11,7 +11,7 @@ pipeline {
     }
 
     parameters {
-        string(name: 'SCENARIOS', defaultValue: '1,2,3,4,5,6', trim: true, description: 'Scenarios to start, in this order, separated by commas (1 to 6). They stay active until Lens fixes them or you revert them, see fault-scenarios/README.md')
+        string(name: 'SCENARIOS', defaultValue: '', trim: true, description: 'Scenarios to start, in this order, separated by commas, for example 1,2,3,4,5,6. They stay active until Lens fixes them or you revert them, see fault-scenarios/README.md. Empty starts nothing')
         string(name: 'GAP_MINUTES', defaultValue: '15', trim: true, description: 'Minutes to wait after a scenario is deployed before starting the next one')
     }
 
@@ -19,6 +19,11 @@ pipeline {
         stage('Run scenarios') {
             steps {
                 script {
+                    if (!params.SCENARIOS) {
+                        echo 'SCENARIOS is empty, so nothing was started'
+                        currentBuild.result = 'NOT_BUILT'
+                        return
+                    }
                     def jobs = ['1': 'product-catalog', '2': 'product-catalog', '3': 'checkout', '4': 'payment', '5': 'email', '6': 'frontend']
                     def scenarios = []
                     for (String part : params.SCENARIOS.split(',')) {

@@ -9,6 +9,7 @@ NAMESPACE=otel-demo
 CHART=opentelemetry-demo
 CHART_REPO=https://open-telemetry.github.io/opentelemetry-helm-charts
 CHART_VERSION=0.42.7
+BASE_IMAGE=ghcr.io/open-telemetry/demo
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORIGINAL_REVISION_FILE="$HOME/.fault-scenarios-original-revision"
 
@@ -25,11 +26,14 @@ Usage: ./run.sh <command>
   6            Config: frontend-config points CART_ADDR at a host that does not exist
   7            Config: product-catalog-config shrinks the DB pool from 10 to 2
   8            Config: same pool change through an environment variable
-  baseline     Re-apply the healthy baseline through Helm
-  watch        Wait until Lens (or anyone) brings everything back to the baseline and print the time
-  revert <n>   Undo scenario n by hand, if Lens did not
+  baseline     Re-apply the healthy baseline through Helm, ending every Helm scenario
+  watch        Print every scenario that starts or gets fixed, with the time
+  revert <n>   Undo scenario n by hand, if Lens did not, and leave the other scenarios running
   status       Show the Helm revision, what still differs from the baseline and every pod that is not healthy
   restore      Roll the release back to the revision saved by setup and delete the ConfigMaps
+
+Scenarios add up: starting one leaves the others running. 1 and 2 both change
+product-catalog, so the second of them deploys an image with both bugs.
 EOF
 }
 
@@ -37,13 +41,11 @@ log() {
     echo "[$(TZ=Asia/Kolkata date '+%H:%M:%S IST')] $*"
 }
 
+args=()
+
 upgrade() {
-    if grep -q GOOD_TAG_PENDING "$DIR/baseline.yaml"; then
-        echo "baseline.yaml has no product-catalog image tag yet" >&2
-        exit 1
-    fi
     helm upgrade "$RELEASE" "$CHART" --repo "$CHART_REPO" --version "$CHART_VERSION" \
-        --namespace "$NAMESPACE" --reuse-values -f "$DIR/baseline.yaml" "$@"
+        --namespace "$NAMESPACE" --reuse-values ${args[@]+"${args[@]}"} "$@"
 }
 
 set_config() {
@@ -62,6 +64,75 @@ config_value() {
     kubectl -n "$NAMESPACE" get configmap "$1" -o jsonpath="{.data.$2}"
 }
 
+mebibytes() {
+    case "$1" in
+        *Gi) echo $(( ${1%Gi} * 1024 )) ;;
+        *Mi) echo "${1%Mi}" ;;
+        *) echo 0 ;;
+    esac
+}
+
+add_baseline() {
+    case "$1" in
+        product-catalog|checkout)
+            args+=(--set "components.$1.imageOverride.repository=$BASE_IMAGE"
+                --set "components.$1.imageOverride.tag=3.1.0-$1"
+                --set-json "components.$1.envOverrides=[]")
+            ;;
+        email)
+            args+=(--set "components.email.imageOverride.repository=$BASE_IMAGE"
+                --set "components.email.imageOverride.tag=3.1.0-email")
+            ;;
+        payment)
+            args+=(--set "components.payment.resources.limits.memory=140Mi")
+            ;;
+    esac
+}
+
+# Pins every service except $1 to what it runs now, so that --reuse-values does not
+# redeploy a scenario that Lens already rolled back with kubectl
+keep_live() {
+    local service image attributes
+    for service in product-catalog checkout email; do
+        image=$(container_field "$service" '.image')
+        if [ "$service" = "$1" ] || [ -n "$(container_field "$service" '.env[?(@.name=="DB_MAX_OPEN_CONNS")].name')" ]; then
+            continue
+        elif [ "$image" = "$BASE_IMAGE:3.1.0-$service" ]; then
+            add_baseline "$service"
+        else
+            args+=(--set "components.$service.imageOverride.repository=${image%:*}"
+                --set "components.$service.imageOverride.tag=${image##*:}")
+            if [ "$service" != email ]; then
+                # Escapes the commas, which --set would otherwise read as separators
+                attributes=$(container_field "$service" '.env[?(@.name=="OTEL_RESOURCE_ATTRIBUTES")].value' | sed 's/,/\\,/g')
+                args+=(--set "components.$service.envOverrides[0].name=OTEL_RESOURCE_ATTRIBUTES"
+                    --set "components.$service.envOverrides[0].value=$attributes")
+            fi
+        fi
+    done
+    if [ "$1" != payment ]; then
+        args+=(--set "components.payment.resources.limits.memory=$(container_field payment '.resources.limits.memory')")
+    fi
+}
+
+product_catalog_tag() {
+    local image
+    image=$(container_field product-catalog '.image')
+    echo "${image##*:}"
+}
+
+# A product-catalog release on top of another bad one keeps its bug, as a real release built on that code would
+stack_on() {
+    local tag
+    tag=$(product_catalog_tag)
+    case "$tag" in
+        "$1"|bad-errors-and-slow)
+            log "product-catalog already runs $tag, so this release keeps that bug too: image bad-errors-and-slow"
+            args+=(--set components.product-catalog.imageOverride.tag=bad-errors-and-slow)
+            ;;
+    esac
+}
+
 changed=0
 
 check() {
@@ -73,26 +144,17 @@ check() {
     fi
 }
 
-mebibytes() {
-    case "$1" in
-        *Gi) echo $(( ${1%Gi} * 1024 )) ;;
-        *Mi) echo "${1%Mi}" ;;
-        *) echo 0 ;;
-    esac
-}
-
 compare() {
     changed=0
-    check 1 "product-catalog image" "$(container_field product-catalog '.image')" \
-        "$(awk '/repository:/ {print $2; exit}' "$DIR/baseline.yaml"):$(awk '/tag:/ {print $2; exit}' "$DIR/baseline.yaml")"
-    check 3 "checkout image" "$(container_field checkout '.image')" "ghcr.io/open-telemetry/demo:3.1.0-checkout"
+    check 1 "product-catalog image" "$(container_field product-catalog '.image')" "$BASE_IMAGE:3.1.0-product-catalog"
+    check 3 "checkout image" "$(container_field checkout '.image')" "$BASE_IMAGE:3.1.0-checkout"
     payment_limit=$(container_field payment '.resources.limits.memory')
     if [ "$(mebibytes "$payment_limit")" -ge 140 ]; then
         check 4 "payment memory limit (140Mi or more)" "$payment_limit" "$payment_limit"
     else
         check 4 "payment memory limit" "$payment_limit" "140Mi"
     fi
-    check 5 "email image" "$(container_field email '.image')" "ghcr.io/open-telemetry/demo:3.1.0-email"
+    check 5 "email image" "$(container_field email '.image')" "$BASE_IMAGE:3.1.0-email"
     check 6 "frontend-config CART_ADDR" "$(config_value frontend-config CART_ADDR)" "cart:8080"
     check 7 "product-catalog-config DB_MAX_OPEN_CONNS" "$(config_value product-catalog-config DB_MAX_OPEN_CONNS)" "10"
     pool_env_name=$(container_field product-catalog '.env[?(@.name=="DB_MAX_OPEN_CONNS")].name')
@@ -112,29 +174,36 @@ case "${1:-}" in
         fi
         log "Original Helm revision: $(cat "$ORIGINAL_REVISION_FILE")"
         kubectl apply -f "$DIR/configmaps.yaml"
-        upgrade
+        upgrade -f "$DIR/baseline.yaml"
         kubectl -n "$NAMESPACE" rollout status deployment/product-catalog --timeout=5m
         kubectl -n "$NAMESPACE" rollout status deployment/frontend --timeout=5m
         log "Baseline is ready"
         ;;
     1)
         log "Scenario 1 started: product-catalog bad-get-product-errors, service.version 3.1.1"
+        keep_live product-catalog
+        stack_on bad-slow-query
         upgrade -f "$DIR/scenario-1.yaml"
         ;;
     2)
         log "Scenario 2 started: product-catalog bad-slow-query, service.version 3.1.2"
+        keep_live product-catalog
+        stack_on bad-get-product-errors
         upgrade -f "$DIR/scenario-2.yaml"
         ;;
     3)
         log "Scenario 3 started: checkout bad-missing-config, service.version 3.1.1"
+        keep_live checkout
         upgrade -f "$DIR/scenario-3.yaml"
         ;;
     4)
         log "Scenario 4 started: payment memory limit ${PAYMENT_MEMORY_LIMIT:-40Mi}"
+        keep_live payment
         upgrade --set components.payment.resources.limits.memory="${PAYMENT_MEMORY_LIMIT:-40Mi}"
         ;;
     5)
         log "Scenario 5 started: email image tag 3.1.0-emial"
+        keep_live email
         upgrade --set components.email.imageOverride.tag=3.1.0-emial
         ;;
     6)
@@ -149,16 +218,30 @@ case "${1:-}" in
         ;;
     8)
         log "Scenario 8 started: product-catalog env DB_MAX_OPEN_CONNS=2"
+        keep_live product-catalog
         upgrade -f "$DIR/scenario-8.yaml"
         ;;
     baseline)
-        upgrade
+        upgrade -f "$DIR/baseline.yaml"
         log "Baseline re-applied"
         ;;
     revert)
         case "${2:-}" in
             1|2|3|4|5|8)
-                upgrade
+                case "$2" in
+                    3) service=checkout ;;
+                    4) service=payment ;;
+                    5) service=email ;;
+                    *) service=product-catalog ;;
+                esac
+                keep_live "$service"
+                if [ "$2" -le 2 ] && [ "$(product_catalog_tag)" = bad-errors-and-slow ]; then
+                    log "product-catalog runs the bugs of scenarios 1 and 2, removing only the bug of scenario $2"
+                    upgrade -f "$DIR/scenario-$((3 - $2)).yaml"
+                else
+                    add_baseline "$service"
+                    upgrade
+                fi
                 ;;
             6)
                 set_config frontend-config CART_ADDR cart:8080
@@ -185,7 +268,7 @@ case "${1:-}" in
         compare
         echo
         if [ "$changed" = 1 ]; then
-            echo "A scenario is still active: run the revert shown next to CHANGED before the next scenario"
+            echo "Scenarios still active: every CHANGED line, with the command that reverts it"
         else
             echo "Everything matches the baseline"
         fi
@@ -200,16 +283,24 @@ case "${1:-}" in
         fi
         ;;
     watch)
-        log "Waiting for everything to match the baseline again (checks every 20 s, Ctrl+C to stop)"
+        before=$(compare)
+        log "Active now:"
+        echo "$before" | grep CHANGED || echo "  nothing, everything matches the baseline"
+        log "Printing every change from here on (checks every 20 s, Ctrl+C to stop)"
         while true; do
-            compare > /dev/null
-            if [ "$changed" = 0 ]; then
-                echo
-                log "Back to the baseline"
-                break
-            fi
-            printf '.'
             sleep 20
+            now=$(compare)
+            changes=$(awk 'NR == FNR {line[FNR] = $0; next} $0 != line[FNR]' <(echo "$before") <(echo "$now"))
+            if [ -n "$changes" ]; then
+                echo
+                echo "$changes" | while IFS= read -r line; do log "$line"; done
+                if ! echo "$now" | grep -q CHANGED; then
+                    log "Everything matches the baseline"
+                fi
+            else
+                printf '.'
+            fi
+            before=$now
         done
         ;;
     restore)

@@ -20,7 +20,8 @@ frontend reads `CART_ADDR` from a ConfigMap. Scenarios 7 and 8 need a
 product-catalog image that reads `DB_MAX_OPEN_CONNS`, which the original image
 does not.
 
-Then run one scenario at a time and leave 5 to 10 minutes between them:
+Then start the scenarios with a gap between them. They add up: starting one
+leaves the others running, so several incidents can be active at the same time.
 
 | Command | Type | Service | Change | Expected Lens action |
 | --- | --- | --- | --- | --- |
@@ -36,17 +37,29 @@ Then run one scenario at a time and leave 5 to 10 minutes between them:
 Scenarios 3, 4 and 5 do not affect users: with one replica, Kubernetes keeps the
 old pod serving until the new one is ready, so only the rollout gets stuck.
 
+Scenarios 1 and 2 both change product-catalog, which runs one image. Whichever
+of them starts second deploys the image `bad-errors-and-slow`, which has both
+bugs, the way a release built on top of the first bad one would. Rolling that
+deploy back one step leaves the first scenario's bug in place.
+
+Every Helm scenario keeps the other services exactly as they run at that
+moment, so it never brings back a scenario that Lens already rolled back with
+kubectl.
+
 Other commands:
 
 - `./run.sh status` shows the Helm revision, every setting that still differs
   from the baseline with the revert command for it, and every pod that is not
   healthy. Scenarios 1, 2, 6, 7 and 8 keep all pods healthy, so check the
-  baseline comparison, not the pod list, before starting the next scenario.
-- `./run.sh watch` waits, checking every 20 seconds, until everything matches
-  the baseline again and prints the time. Start it right after a scenario to
-  record when Lens rolled it back. A payment memory limit of 140Mi or more
-  counts as fixed.
-- `./run.sh revert <n>` undoes scenario `n` when Lens did not.
+  baseline comparison, not the pod list.
+- `./run.sh watch` lists the active scenarios, then checks every 20 seconds and
+  prints each scenario that starts, gets fixed or changes, with the time. Keep
+  it running for the whole test to record when Lens acted. A payment memory
+  limit of 140Mi or more counts as fixed.
+- `./run.sh revert <n>` undoes scenario `n` when Lens did not and leaves the
+  other scenarios running. On the image with both bugs, it removes only the bug
+  of scenario `n`.
+- `./run.sh baseline` ends every Helm scenario at once (1 to 5 and 8).
 - `./run.sh restore` rolls the release back to the revision saved by `setup`
   and deletes the ConfigMaps. Run it once all scenarios are done.
 
@@ -75,7 +88,9 @@ Pipeline to service mapping.
 ## Images
 
 The bad images are built by the Go Jenkins pipeline with `CUSTOM_TAG` set to the
-image tag above, from a commit that is reverted right after the build.
+image tag above, from a commit that is reverted right after the build. The
+product-catalog image `bad-errors-and-slow` has the changes of both
+`bad-get-product-errors` and `bad-slow-query`.
 
 The chart sets `service.version` to the chart's app version (3.1.0) on every
 service, whatever image runs. Scenarios 1 to 3 therefore also set a new

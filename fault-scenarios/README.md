@@ -5,11 +5,13 @@ Bad deploys and config changes for testing Lens against the demo on the
 `otel-demo` namespace (chart `opentelemetry-demo` 0.42.7).
 
 Run everything from Google Cloud Shell. The cluster only accepts control plane
-connections from allowlisted networks and Google Cloud addresses.
+connections from allowlisted networks and Google Cloud addresses. The
+repository is private, so cloning asks for a GitHub username and a personal
+access token as the password.
 
 ```sh
-git clone -b jenkins-pipeline https://github.com/SHUBHAMKUMAR900/opentelemetry-demo.git
-cd opentelemetry-demo/fault-scenarios
+git clone -b jenkins-pipeline https://github.com/cloudtechner/astronomy.git
+cd astronomy/fault-scenarios
 gcloud container clusters get-credentials astronomy-gke --zone asia-south1-a --project ct-lens
 ./run.sh setup
 ```

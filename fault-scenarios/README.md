@@ -85,6 +85,11 @@ per service from the same script path: `deploy-product-catalog` (scenarios 1,
 service. In Lens, map each job to its service under Integrations, Jenkins,
 Pipeline to service mapping.
 
+`jenkins/Jenkinsfile-scenario-runner` starts several scenarios in a row with one
+click: it triggers the service job of each scenario in `SCENARIOS` and waits
+`GAP_MINUTES` after each deploy. Create it as another pipeline job, without the
+Lens notification, so that Lens records only the service jobs' deploys.
+
 ## Images
 
 The bad images are built by the Go Jenkins pipeline with `CUSTOM_TAG` set to the

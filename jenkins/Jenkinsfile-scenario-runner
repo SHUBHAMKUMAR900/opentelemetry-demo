@@ -1,0 +1,54 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timeout(time: 6, unit: 'HOURS')
+    }
+
+    parameters {
+        string(name: 'SCENARIOS', defaultValue: '1,2,3,4,5,6', trim: true, description: 'Scenarios to start, in this order, separated by commas (1 to 6). They stay active until Lens fixes them or you revert them, see fault-scenarios/README.md')
+        string(name: 'GAP_MINUTES', defaultValue: '15', trim: true, description: 'Minutes to wait after a scenario is deployed before starting the next one')
+    }
+
+    stages {
+        stage('Run scenarios') {
+            steps {
+                script {
+                    def jobs = ['1': 'product-catalog', '2': 'product-catalog', '3': 'checkout', '4': 'payment', '5': 'email', '6': 'frontend']
+                    def scenarios = []
+                    for (String part : params.SCENARIOS.split(',')) {
+                        def scenario = part.trim()
+                        if (!jobs.containsKey(scenario)) {
+                            error("Unknown scenario '${scenario}': use the numbers 1 to 6, separated by commas")
+                        }
+                        scenarios.add(scenario)
+                    }
+                    // Regex: a whole number that does not start with 0
+                    if (!(params.GAP_MINUTES ==~ /[1-9][0-9]*/)) {
+                        error('GAP_MINUTES must be a whole number of minutes, 1 or more')
+                    }
+                    def gap = Integer.parseInt(params.GAP_MINUTES)
+                    currentBuild.description = "${params.SCENARIOS} every ${gap} min"
+
+                    for (int i = 0; i < scenarios.size(); i++) {
+                        if (i > 0) {
+                            echo "Waiting ${gap} minutes before scenario ${scenarios[i]}"
+                            sleep(time: gap, unit: 'MINUTES')
+                        }
+                        echo "Starting scenario ${scenarios[i]} with the ${jobs[scenarios[i]]} job"
+                        build(job: jobs[scenarios[i]], parameters: [
+                            string(name: 'ACTION', value: 'scenario'),
+                            string(name: 'SCENARIO', value: scenarios[i])
+                        ])
+                    }
+                    echo 'All scenarios started. They stay active: end them with ACTION=baseline and ACTION=revert, SCENARIO=6, or ACTION=restore'
+                }
+            }
+        }
+    }
+}
